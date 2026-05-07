@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "panorama-projection-toolkit"
+version = "0.1.0"
+authors = [
+    { name = "Nicolai Skutsch" }
+]
+description = "GPU-accelerated Python toolkit for panorama projections"
+readme = { file = "README.md", content-type = "text/markdown" }
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+requires-python = ">=3.9"
+classifiers = [
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Development Status :: 4 - Beta",
+]
+dependencies = [
+    "numpy",
+    "opencv-python",
+    "scipy",
+]
+
+[project.optional-dependencies]
+gpu = ["cupy"]
+
+[project.urls]
+Repository = "https://github.com/n-skutsch/panorama-projection-toolkit"
+Issues = "https://github.com/n-skutsch/panorama-projection-toolkit/issues"
