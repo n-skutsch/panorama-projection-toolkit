@@ -1,12 +1,22 @@
-# Use CuPy if CUDA is available, otherwise NumPy and SciPy
-try:
-    import cupy as xp
-    from cupyx.scipy import ndimage
-    GPU = True
-except ImportError:
+import os
+
+# Check if the mode has been set using the PPT_GPU environment variable
+# - PPT_GPU = 0 -> CPU mode will be used
+# - PPT_GPU = 1 -> GPU mode will be used
+PPT_GPU = os.getenv('PPT_GPU', '1') == '1'
+
+# Use CuPy if CUDA is available and PPT_GPU is True, otherwise NumPy and SciPy
+GPU = False
+if PPT_GPU:
+    try:
+        import cupy as xp
+        from cupyx.scipy import ndimage
+        GPU = True
+    except ImportError:
+        pass
+if not GPU:
     import numpy as xp
     from scipy import ndimage
-    GPU = False
 
 
 # ==========================================================

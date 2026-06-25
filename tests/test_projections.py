@@ -1,5 +1,9 @@
 import cv2
 import numpy as np
+import os
+
+# Set the mode to either CPU (0) or GPU (1)
+os.environ['PPT_GPU'] = '1'
 
 from panorama_projection_toolkit import pano_to_view, view_to_pano, view_to_view, cubemaps_to_pano, save_image
 

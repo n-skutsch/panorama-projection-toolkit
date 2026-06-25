@@ -48,11 +48,12 @@ pip install dist/panorama_projection_toolkit-VERSION-py3-none-any.whl
 
 ### Optional: GPU Acceleration
 
-The toolkit automatically uses CuPy if it is installed and CUDA is available. Otherwise, it falls back to NumPy/SciPy automatically.
+The toolkit automatically uses CuPy if it is installed and CUDA is available. Otherwise, it falls back to NumPy/SciPy automatically. The mode can be set manually be setting the environment variable `PPT_GPU`.
 
 1. Verify CUDA compatibility: https://developer.nvidia.com/cuda/gpus
 2. Download and install CUDA Toolkit: https://developer.nvidia.com/cuda/toolkit
 3. Install the matching CuPy build for your CUDA version: https://docs.cupy.dev/en/stable/install.html
+4. Set the environment variable `PPT_GPU` to `0` for CPU mode (NumPy/SciPy) and `1` for GPU mode (CuPy).
 
 
 ## Supported Formats
@@ -322,6 +323,9 @@ save_image('pano.png', pano)
 
 ```python
 import numpy as np
+import os
+
+os.environ['PPT_GPU'] = '1'
 
 from panorama_projection_toolkit import (
     load_image,
