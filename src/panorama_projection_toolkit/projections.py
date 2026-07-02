@@ -1,4 +1,4 @@
-from .utils import (
+from utils import ( # TODO: Change back to .utils
         xp,
         ndimage,
         to_gpu,
@@ -404,3 +404,343 @@ def cubemaps_to_pano(cubemaps: list[xp.ndarray], pano_size: tuple[int, int]) -> 
     pano = restore_dtype(pano, original_dtype)
 
     return pano
+
+
+def pano_skyline_to_elevations(skyline: xp.ndarray, pano_size: tuple[int, int], yaw_step: float) -> xp.ndarray:
+    """
+    Samples the elevation angles of a panorama skyline at evenly spaced yaw angles. The skyline is given as one row
+    value per panorama column, representing the pixel row of the horizon line at that column, and is bilinearly inter-
+    polated (with wraparound at the panorama edges) at each sampled yaw angle before being converted into an elevation
+    angle. Yaw angles are sampled from 0° up to (but excluding) 360°, spaced by yaw_step degrees, with 0° yaw mapped to
+    the center column of the panorama.
+
+    Note:
+        - Due to inaccuracies in the sampling process, it is not an exact inverse of the pano_elevations_to_skyline
+          function.
+
+    Args:
+        skyline (xp.ndarray): The skyline of shape (width), where each value is the row index of the skyline in the
+                              corresponding panorama column.
+        pano_size (tuple[int, int]): The size of the panorama of shape (height, width).
+        yaw_step (float): The step [°] between consecutive sampled yaw angles.
+
+    Returns:
+        elevations (xp.ndarray): The elevation angles [°] sampled at yaw angles of shape (360/yaw_step).
+    """
+
+    # Check if the arguments are valid
+    assert skyline.ndim == 1, 'The skyline should have exactly 1 dimension.'
+    assert len(pano_size) == 2, 'The pano size should have exactly 2 values (height, width).'
+    assert skyline.shape[0] == pano_size[1], 'The skyline shape should be equal to the panorama width.'
+    assert pano_size[0] > 1, 'The height of the panorama should be greater than 1.'
+    assert pano_size[1] > 1, 'The width of the panorama should be greater than 1.'
+
+    # If CuPy is available, move the skyline array to the GPU, and if not, keep it unchanged
+    skyline = to_gpu(skyline)
+
+    # Get the height and width of the panorama
+    h, w = pano_size
+
+    # Points at which the yaw is sampled
+    yaw_samples = xp.arange(0, 360, yaw_step)
+
+    # Map the yaw angles yaw to panorama columns
+    columns = ((yaw_samples / 360.0) * (w - 1) + w / 2) % w
+
+    # Linearly interpolate between the skyline values
+    x0 = xp.floor(columns).astype(int)
+    x1 = (x0 + 1) % w
+    alpha = columns - x0
+    skyline_interpolated = (1 - alpha) * skyline[x0] + alpha * skyline[x1]
+
+    # Calculate the elevation angles from the skyline values
+    elevations = xp.rad2deg((0.5 - (skyline_interpolated / (h - 1))) * xp.pi)
+
+    # Move the result back to the CPU
+    elevations = to_cpu(elevations)
+
+    return elevations
+
+
+def pano_elevations_to_skyline(elevations: xp.ndarray, pano_size: tuple[int, int], yaw_step: float):
+    """
+    Reconstructs a panorama skyline from elevation angles sampled at evenly spaced yaw angles. Each (yaw, elevation)
+    pair is converted back into a (column, row) pair, and the row values are then linearly interpolated across every
+    column of the panorama width.
+
+    Note:
+        - Due to inaccuracies in the sampling process, it is not an exact inverse of the pano_skyline_to_elevations
+          function.
+
+    Args:
+        elevations (xp.ndarray): The elevation angles [°] sampled at yaw angles of shape (360/yaw_step).
+        pano_size (tuple[int, int]): The size of the panorama of shape (height, width).
+        yaw_step (float): The step [°] between consecutive sampled yaw angles.
+
+    Returns:
+        skyline (xp.ndarray): The reconstructed skyline of shape (width), where each value is the row index of the
+                              skyline in the corresponding panorama column.
+    """
+
+    # Check if the arguments are valid
+    assert elevations.ndim == 1, 'The elevations should have exactly 1 dimension.'
+    assert len(pano_size) == 2, 'The pano size should have exactly 2 values (height, width).'
+    assert elevations.shape[0] == int(360 / yaw_step), 'The elevations shape should be equal to yaw samples.'
+    assert pano_size[0] > 1, 'The height of the panorama should be greater than 1.'
+    assert pano_size[1] > 1, 'The width of the panorama should be greater than 1.'
+
+    # If CuPy is available, move the elevations array to the GPU, and if not, keep it unchanged
+    elevations = to_gpu(elevations)
+
+    # Get the height and width of the panorama
+    h, w = pano_size
+
+    # Points at which the yaw is sampled
+    yaw_samples = xp.arange(0, 360, yaw_step)
+
+    # Map the yaw angles yaw to panorama columns
+    columns = ((yaw_samples / 360.0) * (w - 1) + w / 2) % w
+
+    # Calculate the skyline values from the the elevation angles
+    rows = (0.5 - (xp.deg2rad(elevations) / xp.pi)) * (h - 1)
+
+    # Sort the values for interpolation
+    order = xp.argsort(columns)
+    columns_sorted = columns[order]
+    rows_sorted = rows[order]
+
+    # Extend periodically so interpolation wraps around the panorama seam
+    columns_ext = xp.concatenate([columns_sorted - w, columns_sorted, columns_sorted + w])
+    rows_ext = xp.concatenate([rows_sorted, rows_sorted, rows_sorted])
+
+    # Linearly interpolate between the skyline values
+    skyline = xp.interp(xp.arange(w), columns_ext, rows_ext)
+
+    # Move the result back to the CPU
+    skyline = to_cpu(skyline)
+
+    return skyline
+
+
+def view_skyline_to_elevations(skyline: xp.ndarray, orientation: xp.ndarray, K: xp.ndarray,
+    view_size: tuple[int, int], yaw_step: float) -> xp.ndarray:
+    """
+    Samples the elevation angles of a perspective view's skyline at evenly spaced yaw angles, expressed in the world
+    reference frame. Each column of the skyline is back-projected into a Cartesian ray using the camera intrinsics,
+    rotated into the world frame using the camera orientation, and converted into a yaw/elevation pair. The elevation
+    values are then linearly interpolated at the standard yaw samples. Yaw samples falling outside the range of yaw
+    angles covered by the view are marked invalid.
+
+    Note:
+        - The order of the orientation angles, the coordinate conversions, and the spherical coordinate calculation are
+          designed to work for right-handed ENU coordinate systems. Results may differ for other coordinate systems.
+        - Due to inaccuracies in the sampling process, it is not an exact inverse of the view_elevations_to_skyline
+          function.
+
+    Args:
+        skyline (xp.ndarray): The skyline of shape (width), where each value is the row index of the skyline in the
+                              corresponding view column.
+        orientation (xp.ndarray): The orientation angles [°] (pitch, roll, yaw) of the view.
+        K (xp.ndarray): The camera intrinsic matrix of shape (3, 3).
+        view_size (tuple[int, int]): The size of the view of shape (height, width).
+        yaw_step (float): The step [°] between consecutive sampled yaw angles.
+
+    Returns:
+        elevations (xp.ndarray): The elevation angles, in degrees, sampled at yaw angles of shape (360/yaw_step).
+        valid (xp.ndarray): A boolean mask of shape (360/yaw_step) indicating which sampled yaw angles fall within the
+                            yaw range covered by the view.
+    """
+
+    # Check if the arguments are valid
+    assert skyline.ndim == 1, 'The skyline should have exactly 1 dimension.'
+    assert len(view_size) == 2, 'The view size should have exactly 2 values (height, width).'
+    assert skyline.shape[0] == view_size[1], 'The skyline shape should be equal to the view width.'
+    assert view_size[0] > 1, 'The height of the view should be greater than 1.'
+    assert view_size[1] > 1, 'The width of the view should be greater than 1.'
+    assert orientation.ndim == 1, 'The orientation should have exactly 1 dimension.'
+    assert orientation.shape == (3,), 'The orientation should have exactly 3 values (pitch, roll, yaw).'
+    assert K.shape == (3,3), 'The intrinsic matrix should be a 3x3 matrix.'
+
+    # If CuPy is available, move the skyline, orientation, and K arrays to the GPU, and if not, keep them unchanged
+    skyline = to_gpu(skyline)
+    orientation = to_gpu(orientation)
+    K = to_gpu(K)
+
+    # Get the height and width of the view
+    h, w = view_size
+
+    # Points at which the yaw is sampled
+    yaw_samples = xp.arange(0, 360, yaw_step)
+
+    # Decompose the intrinsic matrix
+    fx = K[0, 0]
+    fy = K[1, 1]
+    cx = K[0, 2]
+    cy = K[1, 2]
+
+    # Map the yaw angles yaw to view columns
+    columns = xp.arange(w)
+    rows = skyline
+
+    # Get the Cartesian projection vectors from the view coordinates and normalize it
+    x = (columns - cx) / fx
+    y = xp.ones_like(x)
+    z = (cy - rows) / fy
+    x, y, z = normalize_vectors(x, y, z)
+
+    # Rotate the Cartesian projection vectors according to the orientation
+    R = angles_to_R(xp.asarray(orientation))
+    xw, yw, zw = rotate_vectors(R.T, x, y, z)
+
+    # Calculate the yaw angles and corresponding elevations from the Cartesian projection vectors
+    yaw_deg = (xp.rad2deg(xp.arctan2(xw, yw)) + 360) % 360
+    elevations_deg = xp.rad2deg(xp.arcsin(zw))
+
+    # Sort the values for interpolation
+    order = xp.argsort(yaw_deg)
+    yaw_sorted = yaw_deg[order]
+    elevations_sorted = elevations_deg[order]
+
+    # Find the largest circular gap between consecutive samples
+    gaps = xp.diff(yaw_sorted)
+    wrap_gap = 360.0 - yaw_sorted[-1] + yaw_sorted[0]
+    all_gaps = xp.concatenate([gaps, wrap_gap[None]])
+    max_gap_idx = int(xp.argmax(all_gaps))
+
+    # If the largest gap is the wraparound gap, the visible range does not cross 0/360
+    if max_gap_idx == len(yaw_sorted) - 1:
+        valid = (yaw_samples >= yaw_sorted[0]) & (yaw_samples <= yaw_sorted[-1])
+
+    # If the largest gap is internal, the visible range crosses 0/360
+    else:  
+        range_start = yaw_sorted[max_gap_idx + 1]
+        range_end = yaw_sorted[max_gap_idx]
+        valid = (yaw_samples >= range_start) | (yaw_samples <= range_end)
+
+    # Linearly interpolate between the elevation values
+    elevations = xp.zeros_like(yaw_samples)
+    if xp.any(valid):
+        elevations[valid] = xp.interp(
+            yaw_samples[valid] if max_gap_idx == len(yaw_sorted) - 1 else
+                (yaw_samples[valid] - yaw_sorted[0]) % 360 + yaw_sorted[0],
+            yaw_sorted,
+            elevations_sorted
+        )
+
+    # Move the results back to the CPU
+    elevations = to_cpu(elevations)
+    valid = to_cpu(valid)
+
+    return elevations, valid
+
+
+def view_elevations_to_skyline(elevations: xp.ndarray, orientation: xp.ndarray, K: xp.ndarray,
+    view_size: tuple[int, int], yaw_step: float, valid: xp.ndarray|None) -> xp.ndarray:
+    """
+    Reconstructs a perspective view's skyline from elevation angles sampled at evenly spaced yaw angles,
+    expressed in the world reference frame. This is the inverse operation of view_skyline_to_elevations: each
+    (yaw, elevation) pair is converted into a Cartesian ray, rotated into the camera frame using the camera
+    orientation, and projected onto the image plane using the camera intrinsics. Only rays with positive depth
+    that fall inside the camera frustum, and that are marked valid, are used; the resulting (column, row)
+    pairs are then linearly interpolated across every column of the view width. Columns for which no valid ray
+    is available default to the bottom row of the view.
+
+    Note:
+        - The order of the orientation angles, the coordinate conversions, and the spherical coordinate calculation are
+          designed to work for right-handed ENU coordinate systems. Results may differ for other coordinate systems.
+        - Due to inaccuracies in the sampling process, it is not an exact inverse of the view_skyline_to_elevations
+          function.
+
+    Args:
+        elevations (xp.ndarray): The elevation angles [°] sampled at yaw angles of shape (360/yaw_step).
+        orientation (xp.ndarray): The orientation angles [°] (pitch, roll, yaw) of the view.
+        K (xp.ndarray): The camera intrinsic matrix of shape (3, 3).
+        view_size (tuple[int, int]): The size of the view of shape (height, width).
+        yaw_step (float): The step [°] between consecutive sampled yaw angles.
+        valid (xp.ndarray|None): An optional boolean mask of shape (360/yaw_step) indicating which sampled
+                                 yaw angles/elevations should be used. If None, all are used.
+
+    Returns:
+        skyline (xp.ndarray): The reconstructed skyline of shape (width), where each value is the row index of the
+                              skyline in the corresponding view column.
+    """
+
+    # Check if the arguments are valid
+    assert elevations.ndim == 1, 'The elevations should have exactly 1 dimension.'
+    assert len(view_size) == 2, 'The view size should have exactly 2 values (height, width).'
+    assert elevations.shape[0] == int(360 / yaw_step), 'The elevations shape should be equal to yaw samples.'
+    assert view_size[0] > 1, 'The height of the view should be greater than 1.'
+    assert view_size[1] > 1, 'The width of the view should be greater than 1.'
+    assert orientation.ndim == 1, 'The orientation should have exactly 1 dimension.'
+    assert orientation.shape == (3,), 'The orientation should have exactly 3 values (pitch, roll, yaw).'
+    assert K.shape == (3,3), 'The intrinsic matrix should be a 3x3 matrix.'
+
+    # If CuPy is available, move the elevations, orientation, and K arrays to the GPU, and if not, keep them unchanged
+    elevations = to_gpu(elevations)
+    orientation = to_gpu(orientation)
+    K = to_gpu(K)
+
+    # Get the height and width of the view
+    h, w = view_size
+
+    # Decompose the intrinsic matrix
+    fx = K[0, 0]
+    fy = K[1, 1]
+    cx = K[0, 2]
+    cy = K[1, 2]    
+
+    # Calculate the Cartesian projection vectors from the yaw angles and corresponding elevations
+    yaw_deg = xp.arange(0, 360, yaw_step)
+    yaw_rad = xp.deg2rad(yaw_deg)
+    elevation_rad = xp.deg2rad(elevations)
+    xw = xp.cos(elevation_rad) * xp.sin(yaw_rad)
+    yw = xp.cos(elevation_rad) * xp.cos(yaw_rad)
+    zw = xp.sin(elevation_rad)
+
+    # Rotate the Cartesian projection vectors according to the orientation
+    R = angles_to_R(xp.asarray(orientation))
+    xc, yc, zc = rotate_vectors(R, xw, yw, zw)
+
+    # If CuPy is available and the valid array is not None, move it to the GPU, and if not, initialize it
+    if valid is not None:
+        valid = to_gpu(valid)
+    else:
+        valid = xp.ones_like(yaw_deg, dtype=bool)
+
+    # Apply the valid mask
+    valid &= (yc > 1e-12)
+    xc = xc[valid]
+    yc = yc[valid]
+    zc = zc[valid]
+
+    # Calculate the image coordinates in the view
+    u = fx * (xc / yc) + cx
+    v = cy - fy * (zc / yc)
+
+    # Compute the pixel mask inside the camera frustum
+    in_bounds = (
+        (u >= 0) & (u <= w - 1) &
+        (v >= 0) & (v <= h - 1)
+    )
+
+    # Apply the pixel mask
+    u = u[in_bounds]
+    v = v[in_bounds]
+
+    # Return default values if no image coordinates are inside the camera frustum
+    if len(u) == 0:
+        return to_cpu(xp.full(w, h - 1, dtype=xp.float64))
+
+    # Sort the values for interpolation
+    order = xp.argsort(u)
+    u_sorted = u[order]
+    v_sorted = v[order]
+
+    # Linearly interpolate between the skyline values
+    x_colums = xp.arange(w)
+    skyline = xp.interp(x_colums, u_sorted, v_sorted)
+
+    # Move the result back to the CPU
+    skyline = to_cpu(skyline)
+
+    return skyline

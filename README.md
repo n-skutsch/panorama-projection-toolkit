@@ -1,10 +1,12 @@
 # Panorama Projection Toolkit
 
-GPU-accelerated Python toolkit for projecting and reprojecting perspective views, cubemaps, and equirectangular panoramas. The toolkit provides fast, fully vectorized implementations of the following transformations:
+GPU-accelerated Python toolkit for projecting and reprojecting perspective views, cubemaps, and equirectangular panoramas, as well as converting between the pixel positions and elevation angles of the skyline in an equirectangular panorama or perspective view. The toolkit provides fast, fully vectorized implementations of the following transformations:
 - equirectangular panorama → perspective view
 - perspective view → equirectangular panorama
 - perspective view → perspective view
 - cubemaps → equirectangular panorama
+- skyline pixel positions → skyline elevation angles
+- skyline elevation angles → skyline pixel positions
 
 It supports both CPU execution through NumPy/SciPy and GPU acceleration through CuPy/CUDA with the same API.
 
@@ -317,6 +319,75 @@ pano = cubemaps_to_pano(
 
 save_image('pano.png', pano)
 ```
+
+### pano_skyline_to_elevations
+
+```python
+pano_skyline_to_elevations(skyline, pano_size, yaw_step)
+```
+
+Samples the elevation angles of a panorama skyline at evenly spaced yaw angles. The skyline is given as one row value per panorama column, representing the pixel row of the horizon line at that column, and is bilinearly inter- polated (with wraparound at the panorama edges) at each sampled yaw angle before being converted into an elevation angle. Yaw angles are sampled from 0° up to (but excluding) 360°, spaced by yaw_step degrees, with 0° yaw mapped to the center column of the panorama. Due to inaccuracies in the sampling process, it is not an exact inverse of the `pano_elevations_to_skyline` function.
+
+Parameters:
+
+| Parameter | Description                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------------------- |
+| skyline   | The skyline of shape (width), where each value is the row index of the skyline in the corresponding panorama column. |
+| pano_size | The size of the panorama of shape (height, width).                                                                   |
+| yaw_step  | The step [°] between consecutive sampled yaw angles.                                                                 |
+
+### pano_elevations_to_skyline
+
+```python
+pano_elevations_to_skyline(elevations, pano_size, yaw_step)
+```
+
+Reconstructs a panorama skyline from elevation angles sampled at evenly spaced yaw angles. Each (yaw, elevation) pair is converted back into a (column, row) pair, and the row values are then linearly interpolated across every column of the panorama width. Due to inaccuracies in the sampling process, it is not an exact inverse of the `pano_skyline_to_elevations` function.
+
+Parameters:
+
+| Parameter  | Description                                                             |
+| ---------- | ----------------------------------------------------------------------- |
+| elevations | The elevation angles [°] sampled at yaw angles of shape (360/yaw_step). |
+| pano_size  | The size of the panorama of shape (height, width).                      |
+| yaw_step   | The step [°] between consecutive sampled yaw angles.                    |
+
+### view_skyline_to_elevations
+
+```python
+view_skyline_to_elevations(skyline, orientation, K, view_size, yaw_step)
+```
+
+Samples the elevation angles of a perspective view's skyline at evenly spaced yaw angles, expressed in the world reference frame. Each column of the skyline is back-projected into a Cartesian ray using the camera intrinsics, rotated into the world frame using the camera orientation, and converted into a yaw/elevation pair. The elevation values are then linearly interpolated at the standard yaw samples. Yaw samples falling outside the range of yaw angles covered by the view are marked invalid. The order of the orientation angles, the coordinate conversions, and the spherical coordinate calculation are designed to work for right-handed ENU coordinate systems. Results may differ for other coordinate systems. Due to inaccuracies in the sampling process, it is not an exact inverse of the `view_elevations_to_skyline` function.
+
+Parameters:
+
+| Parameter   | Description                                                                                                      |
+| ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| skyline     | The skyline of shape (width), where each value is the row index of the skyline in the corresponding view column. |
+| orientation | The orientation angles [°] (pitch, roll, yaw) of the view.                                                       |
+| K           | The camera intrinsic matrix of shape (3, 3).                                                                     |
+| view_size   | The size of the view of shape (height, width).                                                                   |
+| yaw_step    | The step [°] between consecutive sampled yaw angles.                                                             |
+
+### 
+
+```python
+view_elevations_to_skyline(elevations, orientation, K, view_size, yaw_step, valid)
+```
+
+Reconstructs a perspective view's skyline from elevation angles sampled at evenly spaced yaw angles, expressed in the world reference frame. This is the inverse operation of view_skyline_to_elevations: each (yaw, elevation) pair is converted into a Cartesian ray, rotated into the camera frame using the camera orientation, and projected onto the image plane using the camera intrinsics. Only rays with positive depth that fall inside the camera frustum, and that are marked valid, are used; the resulting (column, row) pairs are then linearly interpolated across every column of the view width. Columns for which no valid ray is available default to the bottom row of the view. The order of the orientation angles, the coordinate conversions, and the spherical coordinate calculation are designed to work for right-handed ENU coordinate systems. Results may differ for other coordinate systems. Due to inaccuracies in the sampling process, it is not an exact inverse of the `view_skyline_to_elevations` function.
+
+Parameters:
+
+| Parameter   | Description                                                                                                                            |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| elevations  | The elevation angles [°] sampled at yaw angles of shape (360/yaw_step).                                                                |
+| orientation | The orientation angles [°] (pitch, roll, yaw) of the view.                                                                             |
+| K           | The camera intrinsic matrix of shape (3, 3).                                                                                           |
+| view_size   | The size of the view of shape (height, width).                                                                                         |
+| yaw_step    | The step [°] between consecutive sampled yaw angles.                                                                                   |
+| valid       | An optional boolean mask of shape (360/yaw_step) indicating which sampled yaw angles/elevations should be used. If None, all are used. |
 
 
 ## Example Workflow
