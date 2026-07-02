@@ -585,7 +585,7 @@ def view_skyline_to_elevations(skyline: xp.ndarray, orientation: xp.ndarray, K: 
     # Get the Cartesian projection vectors from the view coordinates and normalize it
     x = (columns - cx) / fx
     y = xp.ones_like(x)
-    z = (cy - rows) / fy
+    z = (rows - cy) / fy
     x, y, z = normalize_vectors(x, y, z)
 
     # Rotate the Cartesian projection vectors according to the orientation
@@ -594,7 +594,7 @@ def view_skyline_to_elevations(skyline: xp.ndarray, orientation: xp.ndarray, K: 
 
     # Calculate the yaw angles and corresponding elevations from the Cartesian projection vectors
     yaw_deg = (xp.rad2deg(xp.arctan2(xw, yw)) + 360) % 360
-    elevations_deg = xp.rad2deg(xp.arcsin(zw))
+    elevations_deg = - xp.rad2deg(xp.arcsin(zw))
 
     # Sort the values for interpolation
     order = xp.argsort(yaw_deg)
@@ -692,7 +692,7 @@ def view_elevations_to_skyline(elevations: xp.ndarray, orientation: xp.ndarray, 
     # Calculate the Cartesian projection vectors from the yaw angles and corresponding elevations
     yaw_deg = xp.arange(0, 360, yaw_step)
     yaw_rad = xp.deg2rad(yaw_deg)
-    elevation_rad = xp.deg2rad(elevations)
+    elevation_rad = xp.deg2rad(- elevations)
     xw = xp.cos(elevation_rad) * xp.sin(yaw_rad)
     yw = xp.cos(elevation_rad) * xp.cos(yaw_rad)
     zw = xp.sin(elevation_rad)
@@ -715,7 +715,7 @@ def view_elevations_to_skyline(elevations: xp.ndarray, orientation: xp.ndarray, 
 
     # Calculate the image coordinates in the view
     u = fx * (xc / yc) + cx
-    v = cy - fy * (zc / yc)
+    v = fy * (zc / yc) + cy
 
     # Compute the pixel mask inside the camera frustum
     in_bounds = (

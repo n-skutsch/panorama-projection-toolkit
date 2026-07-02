@@ -5,7 +5,18 @@ import os
 # Set the mode to either CPU (0) or GPU (1)
 os.environ['PPT_GPU'] = '1'
 
-from panorama_projection_toolkit import pano_to_view, view_to_pano, view_to_view, cubemaps_to_pano, save_image
+from panorama_projection_toolkit import (
+        load_image,
+        save_image,
+        pano_to_view,
+        view_to_pano,
+        view_to_view,
+        cubemaps_to_pano,
+        pano_skyline_to_elevations,
+        pano_elevations_to_skyline,
+        view_skyline_to_elevations,
+        view_elevations_to_skyline
+    )
 
 
 def put_centered_text(image: np.ndarray, text: str) -> np.ndarray:
