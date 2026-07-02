@@ -370,7 +370,7 @@ Parameters:
 | view_size   | The size of the view of shape (height, width).                                                                   |
 | yaw_step    | The step [°] between consecutive sampled yaw angles.                                                             |
 
-### 
+### view_elevations_to_skyline
 
 ```python
 view_elevations_to_skyline(elevations, orientation, K, view_size, yaw_step, valid)
