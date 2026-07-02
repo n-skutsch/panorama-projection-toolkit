@@ -1,4 +1,4 @@
-from utils import ( # TODO: Change back to .utils
+from .utils import (
         xp,
         ndimage,
         to_gpu,
