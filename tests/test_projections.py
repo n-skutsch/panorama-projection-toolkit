@@ -127,7 +127,7 @@ def main():
         ]
 
     # Test pano_to_view
-    save_image('test_pano_to_view.png', pano_to_view(input_pano, 90, np.array([10, 0, 90]), (1000, 1000)))
+    save_image('test_pano_to_view.png', pano_to_view(input_pano, (60, 90), np.array([10, 0, 90]), (1000, 1000)))
 
     # Test view_to_pano
     save_image('test_view_to_pano_N.png', view_to_pano(input_cube_N, 90, np.array([ 0, 0,   0]), (2000, 4000)))
@@ -136,11 +136,11 @@ def main():
 
     # Test view_to_view
     save_image('test_view_to_view_N.png', view_to_view(input_cube_N, 90, np.array([ 0, 0,   0]),
-                                                       90, np.array([45, 0, -45]), (1000, 1000)))
+                                                       (60, 90), np.array([45, 0, -45]), (1000, 1000)))
     save_image('test_view_to_view_E.png', view_to_view(input_cube_E, 90, np.array([ 0, 0, -90]),
-                                                       90, np.array([45, 0, -45]), (1000, 1000)))
+                                                       (60, 90), np.array([45, 0, -45]), (1000, 1000)))
     save_image('test_view_to_view_U.png', view_to_view(input_cube_U, 90, np.array([90, 0,   0]),
-                                                       90, np.array([45, 0, -45]), (1000, 1000)))
+                                                       (60, 90), np.array([45, 0, -45]), (1000, 1000)))
 
     # Test cubemaps_to_pano
     save_image('test_cubemaps_to_pano_no_blend.png', cubemaps_to_pano(cubemaps_no_blend, (2000, 4000)))

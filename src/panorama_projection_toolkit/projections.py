@@ -4,6 +4,7 @@ from .utils import (
         to_gpu,
         to_cpu,
         restore_dtype,
+        resolve_fov,
         normalize_vectors,
         rotate_vectors,
         vectors_from_grid,
@@ -13,11 +14,14 @@ from .utils import (
     )
 
 
-def pano_to_view(pano: xp.ndarray, fov: float, orientation: xp.ndarray, view_size: tuple[int, int]) -> xp.ndarray:
+def pano_to_view(pano: xp.ndarray, fov: tuple[float, float]|float, orientation: xp.ndarray,
+                 view_size: tuple[int, int]) -> xp.ndarray:
     """
     Creates a view image from an equirectangular panorama. The panorama is assumed to be an array of shape
-    (height, width[, channels]). The FOV and orientation angles are assumed to be in DEG. The FOV is assumed to be
-    the same in vertical and horizontal direction. The orientation is assumed to be in (pitch, roll, yaw) order.
+    (height, width[, channels]). The FOV and orientation angles are assumed to be in DEG. The FOV can either be a
+    single value, in which case it is assumed to be the same in vertical and horizontal direction, or a (fov_h, fov_w)
+    tuple specifying the vertical and horizontal FOV separately. The orientation is assumed to be in (pitch, roll, yaw)
+    order.
 
     Note:
         - The order of the orientation angles, the coordinate conversions, and the spherical coordinate
@@ -27,7 +31,8 @@ def pano_to_view(pano: xp.ndarray, fov: float, orientation: xp.ndarray, view_siz
 
     Args:
         pano (xp.ndarray): The reference panorama of shape (height, width[, channels]).
-        fov (float): The FOV [°] of the new view.
+        fov (tuple[float, float]|float): The FOV [°] of the new view, either as a single value used for both the
+                                         vertical and horizontal direction, or as a (fov_h, fov_w) tuple.
         orientation (xp.ndarray): The orientation angles [°] (pitch, roll, yaw) of new view.
         view_size (tuple[int, int]): The size of the output image of shape (height, width).
 
@@ -38,8 +43,6 @@ def pano_to_view(pano: xp.ndarray, fov: float, orientation: xp.ndarray, view_siz
     # Check if the arguments are valid
     assert pano.ndim >= 2, 'The panorama should have at least 2 dimensions.'
     assert pano.ndim <= 3, 'The panorama should have no more than 3 dimensions.'
-    assert fov > 0, 'The FOV should be greater than 0.'
-    assert fov < 180, 'The FOV should be smaller than 180.'
     assert orientation.ndim == 1, 'The orientation should have exactly 1 dimension.'
     assert orientation.shape == (3,), 'The orientation should have exactly 3 values (pitch, roll, yaw).'
     assert len(view_size) == 2, 'The view size should have exactly 2 values (height, width).'
@@ -48,6 +51,9 @@ def pano_to_view(pano: xp.ndarray, fov: float, orientation: xp.ndarray, view_siz
 
     # Save the original data type of the panorama
     original_dtype = pano.dtype
+
+    # Resolve the FOV argument
+    fov_h, fov_w = resolve_fov(fov)
 
     # If CuPy is available, move the panorama and orientation arrays to the GPU, and if not, keep them unchanged
     pano = to_gpu(pano)
@@ -60,10 +66,11 @@ def pano_to_view(pano: xp.ndarray, fov: float, orientation: xp.ndarray, view_siz
     i, j = xp.meshgrid(xp.arange(h), xp.arange(w), indexing='ij')
 
     # Create a Cartesian projection vector for each pixel depending on the FOV and normalize it
-    fov = xp.deg2rad(fov)
-    x = (j / (w - 1) - 0.5) * 2 * xp.tan(fov / 2)
+    fov_h_rad = xp.deg2rad(fov_h)
+    fov_w_rad = xp.deg2rad(fov_w)
+    x = (j / (w - 1) - 0.5) * 2 * xp.tan(fov_w_rad / 2)
     y = xp.ones_like(x)
-    z = (i / (h - 1) - 0.5) * 2 * xp.tan(fov / 2)
+    z = (i / (h - 1) - 0.5) * 2 * xp.tan(fov_h_rad / 2)
     x, y, z = normalize_vectors(x, y, z)
 
     # Rotate the Cartesian projection vectors according to the orientation
@@ -90,12 +97,14 @@ def pano_to_view(pano: xp.ndarray, fov: float, orientation: xp.ndarray, view_siz
     return view
 
 
-def view_to_pano(view: xp.ndarray, fov: float, orientation: xp.ndarray, pano_size: tuple[int, int]) -> xp.ndarray:
+def view_to_pano(view: xp.ndarray, fov: tuple[float, float]|float, orientation: xp.ndarray,
+                 pano_size: tuple[int, int]) -> xp.ndarray:
     """
-    Projects a perspective view onto an equirectangular panorama. The panorama will be black except for the areas
-    onto which the view is projected. The view is assumed to be an array of shape (height, width[, channels]). The FOV and
-    orientation angles are assumed to be in DEG. The FOV is assumed to be the same in vertical and horizontal
-    direction. The orientation is assumed to be in (pitch, roll, yaw) order.
+    Projects a perspective view onto an equirectangular panorama. The panorama will be black except for the areas onto
+    which the view is projected. The view is assumed to be an array of shape (height, width[, channels]). The FOV and
+    orientation angles are assumed to be in DEG. The FOV can either be a single value, in which case it is assumed to
+    be the same in vertical and horizontal direction, or a (fov_h, fov_w) tuple specifying the vertical and horizontal
+    FOV separately. The orientation is assumed to be in (pitch, roll, yaw) order.
 
     Note:
         - The order of the orientation angles, the coordinate conversions, and the spherical coordinate
@@ -105,7 +114,8 @@ def view_to_pano(view: xp.ndarray, fov: float, orientation: xp.ndarray, pano_siz
 
     Args:
         view (xp.ndarray): The reference view of shape (height, width[, channels]).
-        fov (float): The FOV [°] of the reference view. 
+        fov (tuple[float, float]|float): The FOV [°] of the reference view, either as a single value used for both the
+                                         vertical and horizontal direction, or as a (fov_h, fov_w) tuple.
         orientation (xp.ndarray): The orientation angles [°] (pitch, roll, yaw) of the reference view. 
         pano_size (tuple[int, int]): The size of the output image of shape (height, width).
 
@@ -116,8 +126,6 @@ def view_to_pano(view: xp.ndarray, fov: float, orientation: xp.ndarray, pano_siz
     # Check if the arguments are valid
     assert view.ndim >= 2, 'The view should have at least 2 dimensions.'
     assert view.ndim <= 3, 'The view should have no more than 3 dimensions.'
-    assert fov > 0, 'The FOV should be greater than 0.'
-    assert fov < 180, 'The FOV should be smaller than 180.'
     assert orientation.ndim == 1, 'The orientation should have exactly 1 dimension.'
     assert orientation.shape == (3,), 'The orientation should have exactly 3 values (pitch, roll, yaw).'
     assert len(pano_size) == 2, 'The panorama size should have exactly 2 values (height, width).'
@@ -126,6 +134,9 @@ def view_to_pano(view: xp.ndarray, fov: float, orientation: xp.ndarray, pano_siz
 
     # Save the original data type of the view
     original_dtype = view.dtype
+
+    # Resolve the FOV argument
+    fov_h, fov_w = resolve_fov(fov)
 
     # If CuPy is available, move the view and orientation arrays to the GPU, and if not, keep them unchanged
     view = to_gpu(view)
@@ -147,16 +158,17 @@ def view_to_pano(view: xp.ndarray, fov: float, orientation: xp.ndarray, pano_siz
     x, y, z = rotate_vectors(R, x, y, z)
 
     # Compute the pixel mask inside the camera frustum
-    fov = xp.deg2rad(fov)
+    fov_h_rad = xp.deg2rad(fov_h)
+    fov_w_rad = xp.deg2rad(fov_w)
     valid = (
         (y > 0) &
-        (xp.abs(x / y) < xp.tan(fov / 2)) &
-        (xp.abs(z / y) < xp.tan(fov / 2))
+        (xp.abs(x / y) < xp.tan(fov_w_rad / 2)) &
+        (xp.abs(z / y) < xp.tan(fov_h_rad / 2))
     )
 
     # Calculate the image coordinates in the view
-    u_view = ((z[valid] / y[valid]) / xp.tan(fov / 2) + 1) * 0.5 * (view.shape[0] - 1)
-    v_view = ((x[valid] / y[valid]) / xp.tan(fov / 2) + 1) * 0.5 * (view.shape[1] - 1)
+    u_view = ((z[valid] / y[valid]) / xp.tan(fov_h_rad / 2) + 1) * 0.5 * (view.shape[0] - 1)
+    v_view = ((x[valid] / y[valid]) / xp.tan(fov_w_rad / 2) + 1) * 0.5 * (view.shape[1] - 1)
 
     # Create an empty panorama, project the view onto it, and apply bilinear sampling
     pano = xp.zeros((h, w, *view.shape[2:]), dtype=view.dtype)
@@ -169,13 +181,14 @@ def view_to_pano(view: xp.ndarray, fov: float, orientation: xp.ndarray, pano_siz
     return pano
 
 
-def view_to_view(old_view: xp.ndarray, old_fov: float, old_orientation: xp.ndarray,
-                 new_fov: float, new_orientation: xp.ndarray, view_size: tuple[int, int]) -> xp.ndarray:
+def view_to_view(old_view: xp.ndarray, old_fov: tuple[float, float]|float, old_orientation: xp.ndarray,
+                 new_fov: tuple[float, float]|float, new_orientation: xp.ndarray, view_size: tuple[int, int]) -> xp.ndarray:
     """
-    Projects one perspective view into another. The new view will be black except for the areas onto which the view
-    is projected. The view is assumed to be an array of shape (height, width[, channels]). The FOV and orientation angles
-    are assumed to be in DEG. The FOV is assumed to be the same in vertical and horizontal direction. The orientation
-    is assumed to be in (pitch, roll, yaw) order.
+    Projects one perspective view into another. The new view will be black except for the areas onto which the view is
+    projected. The view is assumed to be an array of shape (height, width[, channels]). The FOV and orientation angles
+    are assumed to be in DEG. The FOV can either be a single value, in which case it is assumed to be the same in
+    vertical and horizontal direction, or a (fov_h, fov_w) tuple specifying the vertical and horizontal FOV separately.
+    The orientation is assumed to be in (pitch, roll, yaw) order.
 
     Note:
         - The order of the orientation angles, the coordinate conversions, and the spherical coordinate
@@ -185,9 +198,11 @@ def view_to_view(old_view: xp.ndarray, old_fov: float, old_orientation: xp.ndarr
 
     Args:
         old_view (xp.ndarray): The reference view of shape (height, width[, channels]).
-        old_fov (float): The FOV [°] of the reference view.
+        old_fov (tuple[float, float]|float): The FOV [°] of the reference view, either as a single value used for both
+                                             the vertical and horizontal direction, or as a (fov_h, fov_w) tuple.
         old_orientation (xp.ndarray): The orientation angles [°] (pitch, roll, yaw) of the reference view.
-        new_fov (float): The FOV [°] of the new view.
+        new_fov (tuple[float, float]|float): The FOV [°] of the new view, either as a single value used for both the
+                                             vertical and horizontal direction, or as a (fov_h, fov_w) tuple.
         new_orientation (xp.ndarray): The orientation angles [°] (pitch, roll, yaw) of the new view.
         view_size (tuple): The size of the output image of shape (height, width).
 
@@ -198,12 +213,8 @@ def view_to_view(old_view: xp.ndarray, old_fov: float, old_orientation: xp.ndarr
     # Check if the arguments are valid
     assert old_view.ndim >= 2, 'The view should have at least 2 dimensions.'
     assert old_view.ndim <= 3, 'The view should have no more than 3 dimensions.'
-    assert old_fov > 0, 'The FOV should be greater than 0.'
-    assert old_fov < 180, 'The FOV should be smaller than 180.'
     assert old_orientation.ndim == 1, 'The orientation should have exactly 1 dimension.'
     assert old_orientation.shape == (3,), 'The orientation should have exactly 3 values (pitch, roll, yaw).'
-    assert new_fov > 0, 'The FOV should be greater than 0.'
-    assert new_fov < 180, 'The FOV should be smaller than 180.'
     assert new_orientation.ndim == 1, 'The orientation should have exactly 1 dimension.'
     assert new_orientation.shape == (3,), 'The orientation should have exactly 3 values (pitch, roll, yaw).'
     assert len(view_size) == 2, 'The view size should have exactly 2 values (height, width).'
@@ -212,6 +223,10 @@ def view_to_view(old_view: xp.ndarray, old_fov: float, old_orientation: xp.ndarr
 
     # Save the original data type of the view
     original_dtype = old_view.dtype
+
+    # Resolve the FOV arguments
+    old_fov_h, old_fov_w = resolve_fov(old_fov)
+    new_fov_h, new_fov_w = resolve_fov(new_fov)
 
     # If CuPy is available, move the old view and orientation arrays to the GPU, and if not, keep them unchanged
     old_view = to_gpu(old_view)
@@ -225,10 +240,11 @@ def view_to_view(old_view: xp.ndarray, old_fov: float, old_orientation: xp.ndarr
     i, j = xp.meshgrid(xp.arange(h), xp.arange(w), indexing='ij')
 
     # Create a Cartesian projection vector for each pixel depending on the FOV and normalize it
-    new_fov_rad = xp.deg2rad(new_fov)
-    x_new = (j / (w - 1) - 0.5) * 2 * xp.tan(new_fov_rad / 2)
+    new_fov_h_rad = xp.deg2rad(new_fov_h)
+    new_fov_w_rad = xp.deg2rad(new_fov_w)
+    x_new = (j / (w - 1) - 0.5) * 2 * xp.tan(new_fov_w_rad / 2)
     y_new = xp.ones_like(x_new)
-    z_new = (i / (h - 1) - 0.5) * 2 * xp.tan(new_fov_rad / 2)
+    z_new = (i / (h - 1) - 0.5) * 2 * xp.tan(new_fov_h_rad / 2)
     x_new, y_new, z_new = normalize_vectors(x_new, y_new, z_new)
 
     # Rotate the Cartesian projection vectors according to the new orientation
@@ -240,16 +256,17 @@ def view_to_view(old_view: xp.ndarray, old_fov: float, old_orientation: xp.ndarr
     x_old, y_old, z_old = rotate_vectors(R_old, x_new, y_new, z_new)
 
     # Compute the pixel mask inside the camera frustum
-    old_fov_rad = xp.deg2rad(old_fov)
+    old_fov_h_rad = xp.deg2rad(old_fov_h)
+    old_fov_w_rad = xp.deg2rad(old_fov_w)
     valid = (
         (y_old > 0) &
-        (xp.abs(x_old / y_old) < xp.tan(old_fov_rad / 2)) &
-        (xp.abs(z_old / y_old) < xp.tan(old_fov_rad / 2))
+        (xp.abs(x_old / y_old) < xp.tan(old_fov_w_rad / 2)) &
+        (xp.abs(z_old / y_old) < xp.tan(old_fov_h_rad / 2))
     )
 
     # Calculate the image coordinates in the view
-    u_old = ((z_old / y_old) / xp.tan(old_fov_rad / 2) + 1) * 0.5 * (old_view.shape[0] - 1)
-    v_old = ((x_old / y_old) / xp.tan(old_fov_rad / 2) + 1) * 0.5 * (old_view.shape[1] - 1)
+    u_old = ((z_old / y_old) / xp.tan(old_fov_h_rad / 2) + 1) * 0.5 * (old_view.shape[0] - 1)
+    v_old = ((x_old / y_old) / xp.tan(old_fov_w_rad / 2) + 1) * 0.5 * (old_view.shape[1] - 1)
 
     # Create an empty view, project the old view onto it, and apply bilinear sampling
     new_view = xp.zeros((h, w, *old_view.shape[2:]), dtype=old_view.dtype)

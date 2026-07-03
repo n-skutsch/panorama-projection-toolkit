@@ -85,6 +85,38 @@ def restore_dtype(x: xp.ndarray, dtype: xp.dtype) -> xp.ndarray:
     return x
 
 
+def resolve_fov(fov: tuple[float, float]|float) -> tuple[float, float]:
+    """
+    Resolves a FOV argument into separate vertical and horizontal FOV values. The FOV angle(s) is/are assumed to be in
+    DEG. If a single float is given, the same value is used for both the vertical and horizontal direction. If a tuple
+    is given, it is interpreted as (fov_h, fov_w), i.e. the vertical (h) and horizontal (w) FOV respectively.
+
+    Args:
+        fov (tuple[float, float]|float): The FOV [°], either as a single value used for both the vertical and
+                                         horizontal direction, or as a (fov_h, fov_w) tuple.
+
+    Returns:
+        fov_h (float): The vertical FOV [°].
+        fov_w (float): The horizontal FOV [°].
+    """
+
+    # If a tuple is given, unpack it into the vertical and horizontal FOV, and if a float is given, use it for both
+    if isinstance(fov, tuple):
+        assert len(fov) == 2, 'The FOV tuple should have exactly 2 values (fov_h, fov_w).'
+        fov_h, fov_w = fov
+    else:
+        fov_h = fov
+        fov_w = fov
+
+    # Check if the FOV values are valid
+    assert fov_h > 0,   'The FOV should be greater than 0.'
+    assert fov_h < 180, 'The FOV should be smaller than 180.'
+    assert fov_w > 0,   'The FOV should be greater than 0.'
+    assert fov_w < 180, 'The FOV should be smaller than 180.'
+
+    return fov_h, fov_w
+
+
 # ==========================================================
 # GEOMETRY
 # ==========================================================
