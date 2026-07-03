@@ -170,16 +170,16 @@ save_image('output.png', image)
 pano_to_view(pano, fov, orientation, view_size)
 ```
 
-Creates a view image from an equirectangular panorama. The panorama is assumed to be an array of shape `(height, width[, channels])`. The FOV and orientation angles are assumed to be in DEG. The FOV is assumed to be the same in vertical and horizontal direction. The orientation is assumed to be in `(pitch, roll, yaw)` order. The order of the orientation angles, the coordinate conversions, and the spherical coordinate calculation are designed to work for right-handed ENU coordinate systems. Results may differ for other coordinate systems. Due to inaccuracies in the sampling process, it is not an exact inverse of the `view_to_pano` function.
+Creates a view image from an equirectangular panorama. The panorama is assumed to be an array of shape `(height, width[, channels])`. The FOV and orientation angles are assumed to be in DEG. The FOV can either be a single value, in which case it is assumed to be the same in vertical and horizontal direction, or a `(fov_h, fov_w)` tuple specifying the vertical and horizontal FOV separately. The orientation is assumed to be in `(pitch, roll, yaw)` order. The order of the orientation angles, the coordinate conversions, and the spherical coordinate calculation are designed to work for right-handed ENU coordinate systems. Results may differ for other coordinate systems. Due to inaccuracies in the sampling process, it is not an exact inverse of the `view_to_pano` function.
 
 Parameters:
 
-| Parameter   | Description                                                    |
-| ----------- | -------------------------------------------------------------- |
-| pano        | The reference panorama of shape `(height, width[, channels])`. |
-| fov         | The FOV [°] of the new view.                                   |
-| orientation | The orientation angles [°] `(pitch, roll, yaw)` of new view.   |
-| view_size   | The size of the output image of shape `(height, width)`.       |
+| Parameter   | Description                                                                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| pano        | The reference panorama of shape `(height, width[, channels])`.                                                                             |
+| fov         | The FOV [°] of the new view, either as a single value used for both the vertical and horizontal direction, or as a `(fov_h, fov_w)` tuple. |
+| orientation | The orientation angles [°] `(pitch, roll, yaw)` of new view.                                                                               |
+| view_size   | The size of the output image of shape `(height, width)`.                                                                                   |
 
 
 Example:
@@ -205,16 +205,16 @@ save_image('view.png', view)
 view_to_pano(view, fov, orientation, pano_size)
 ```
 
-Projects a perspective view onto an equirectangular panorama. The panorama will be black except for the areas onto which the view is projected. The view is assumed to be an array of shape `(height, width[, channels])`. The FOV and orientation angles are assumed to be in DEG. The FOV is assumed to be the same in vertical and horizontal direction. The orientation is assumed to be in `(pitch, roll, yaw)` order. The order of the orientation angles, the coordinate conversions, and the spherical coordinate calculation are designed to work for right-handed ENU coordinate systems. Results may differ for other coordinate systems. Due to inaccuracies in the sampling process, it is not an exact inverse of the `pano_to_view` function.
+Projects a perspective view onto an equirectangular panorama. The panorama will be black except for the areas onto which the view is projected. The view is assumed to be an array of shape `(height, width[, channels])`. The FOV and orientation angles are assumed to be in DEG. The FOV can either be a single value, in which case it is assumed to be the same in vertical and horizontal direction, or a `(fov_h, fov_w)` tuple specifying the vertical and horizontal FOV separately. The orientation is assumed to be in `(pitch, roll, yaw)` order. The order of the orientation angles, the coordinate conversions, and the spherical coordinate calculation are designed to work for right-handed ENU coordinate systems. Results may differ for other coordinate systems. Due to inaccuracies in the sampling process, it is not an exact inverse of the `pano_to_view` function.
 
 Parameters:
 
-| Parameter   | Description                                                        |
-| ----------- | ------------------------------------------------------------------ |
-| view        | The reference view of shape `(height, width[, channels])`.         |
-| fov         | The FOV [°] of the reference view.                                 |
-| orientation | The orientation angles [°] `(pitch, roll, yaw)` of reference view. |
-| pano_size   | The size of the output image of shape `(height, width)`.           |
+| Parameter   | Description                                                                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| view        | The reference view of shape `(height, width[, channels])`.                                                                                       |
+| fov         | The FOV [°] of the reference view, either as a single value used for both the vertical and horizontal direction, or as a `(fov_h, fov_w)` tuple. |
+| orientation | The orientation angles [°] `(pitch, roll, yaw)` of reference view.                                                                               |
+| pano_size   | The size of the output image of shape `(height, width)`.                                                                                         |
 
 Example:
 
@@ -239,18 +239,18 @@ save_image('pano.png', pano)
 view_to_view(old_view, old_fov, old_orientation, new_fov, new_orientation, view_size)
 ```
 
-Projects one perspective view into another. The new view will be black except for the areas onto which the view is projected. The view is assumed to be an array of shape `(height, width[, channels])`. The FOV and orientation angles are assumed to be in DEG. The FOV is assumed to be the same in vertical and horizontal direction. The orientation is assumed to be in `(pitch, roll, yaw)` order. The order of the orientation angles, the coordinate conversions, and the spherical coordinate calculation are designed to work for right-handed ENU coordinate systems. Results may differ for other coordinate systems. Due to inaccuracies in the sampling process, the function is not an exact inverse of itself.
+Projects one perspective view into another. The new view will be black except for the areas onto which the view is projected. The view is assumed to be an array of shape `(height, width[, channels])`. The FOV and orientation angles are assumed to be in DEG. The FOV can either be a single value, in which case it is assumed to be the same in vertical and horizontal direction, or a `(fov_h, fov_w)` tuple specifying the vertical and horizontal FOV separately. The orientation is assumed to be in `(pitch, roll, yaw)` order. The order of the orientation angles, the coordinate conversions, and the spherical coordinate calculation are designed to work for right-handed ENU coordinate systems. Results may differ for other coordinate systems. Due to inaccuracies in the sampling process, the function is not an exact inverse of itself.
 
 Parameters:
 
-| Parameter       | Description                                                            |
-| --------------- | ---------------------------------------------------------------------- |
-| old_view        | The reference view of shape `(height, width[, channels])`.             |
-| old_fov         | The FOV [°] of the reference view.                                     |
-| old_orientation | The orientation angles [°] `(pitch, roll, yaw)` of the reference view. |
-| new_fov         | The FOV [°] of the new view.                                           |
-| new_orientation | The orientation angles [°] `(pitch, roll, yaw)` of the new view.       |
-| view_size       | The size of the output image of shape `(height, width)`.               |
+| Parameter       | Description                                                                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| old_view        | The reference view of shape `(height, width[, channels])`.                                                                                       |
+| old_fov         | The FOV [°] of the reference view, either as a single value used for both the vertical and horizontal direction, or as a `(fov_h, fov_w)` tuple. |
+| old_orientation | The orientation angles [°] `(pitch, roll, yaw)` of the reference view.                                                                           |
+| new_fov         | The FOV [°] of the new view, either as a single value used for both the vertical and horizontal direction, or as a `(fov_h, fov_w)` tuple.       |
+| new_orientation | The orientation angles [°] `(pitch, roll, yaw)` of the new view.                                                                                 |
+| view_size       | The size of the output image of shape `(height, width)`.                                                                                         |
 
 Example:
 
