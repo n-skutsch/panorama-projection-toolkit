@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "panorama-projection-toolkit"
-version = "0.3.1"
+version = "0.4.0"
 authors = [
     { name = "Nicolai Skutsch" }
 ]

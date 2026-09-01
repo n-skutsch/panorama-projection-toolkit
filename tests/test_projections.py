@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import os
 
+from pathlib import Path
+
 # Set the mode to either CPU (0) or GPU (1)
 os.environ['PPT_GPU'] = '1'
 
@@ -17,6 +19,11 @@ from panorama_projection_toolkit import (
         view_skyline_to_elevations,
         view_elevations_to_skyline
     )
+
+# Images produced by this script are always written to the tests directory
+# itself (where this file lives), regardless of the working directory the
+# script is run from.
+TESTS_DIR = Path(__file__).resolve().parent
 
 
 def put_centered_text(image: np.ndarray, text: str) -> np.ndarray:
@@ -127,24 +134,24 @@ def main():
         ]
 
     # Test pano_to_view
-    save_image('test_pano_to_view.png', pano_to_view(input_pano, (60, 90), np.array([10, 0, 90]), (1000, 1000)))
+    save_image(TESTS_DIR / 'test_pano_to_view.png', pano_to_view(input_pano, (60, 90), np.array([10, 0, 90]), (1000, 1000)))
 
     # Test view_to_pano
-    save_image('test_view_to_pano_N.png', view_to_pano(input_cube_N, 90, np.array([ 0, 0,   0]), (2000, 4000)))
-    save_image('test_view_to_pano_E.png', view_to_pano(input_cube_E, 90, np.array([ 0, 0, -90]), (2000, 4000)))
-    save_image('test_view_to_pano_U.png', view_to_pano(input_cube_U, 90, np.array([90, 0,   0]), (2000, 4000)))
+    save_image(TESTS_DIR / 'test_view_to_pano_N.png', view_to_pano(input_cube_N, 90, np.array([ 0, 0,   0]), (2000, 4000)))
+    save_image(TESTS_DIR / 'test_view_to_pano_E.png', view_to_pano(input_cube_E, 90, np.array([ 0, 0, -90]), (2000, 4000)))
+    save_image(TESTS_DIR / 'test_view_to_pano_U.png', view_to_pano(input_cube_U, 90, np.array([90, 0,   0]), (2000, 4000)))
 
     # Test view_to_view
-    save_image('test_view_to_view_N.png', view_to_view(input_cube_N, 90, np.array([ 0, 0,   0]),
+    save_image(TESTS_DIR / 'test_view_to_view_N.png', view_to_view(input_cube_N, 90, np.array([ 0, 0,   0]),
                                                        (60, 90), np.array([45, 0, -45]), (1000, 1000)))
-    save_image('test_view_to_view_E.png', view_to_view(input_cube_E, 90, np.array([ 0, 0, -90]),
+    save_image(TESTS_DIR / 'test_view_to_view_E.png', view_to_view(input_cube_E, 90, np.array([ 0, 0, -90]),
                                                        (60, 90), np.array([45, 0, -45]), (1000, 1000)))
-    save_image('test_view_to_view_U.png', view_to_view(input_cube_U, 90, np.array([90, 0,   0]),
+    save_image(TESTS_DIR / 'test_view_to_view_U.png', view_to_view(input_cube_U, 90, np.array([90, 0,   0]),
                                                        (60, 90), np.array([45, 0, -45]), (1000, 1000)))
 
     # Test cubemaps_to_pano
-    save_image('test_cubemaps_to_pano_no_blend.png', cubemaps_to_pano(cubemaps_no_blend, (2000, 4000)))
-    save_image('test_cubemaps_to_pano_blend.png', cubemaps_to_pano(cubemaps_blend, (2000, 4000)))
+    save_image(TESTS_DIR / 'test_cubemaps_to_pano_no_blend.png', cubemaps_to_pano(cubemaps_no_blend, (2000, 4000)))
+    save_image(TESTS_DIR / 'test_cubemaps_to_pano_blend.png', cubemaps_to_pano(cubemaps_blend, (2000, 4000)))
 
 
 if __name__ == '__main__':

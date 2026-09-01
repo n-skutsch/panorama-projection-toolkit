@@ -15,7 +15,7 @@ from .utils import (
 
 
 def pano_to_view(pano: xp.ndarray, fov: tuple[float, float]|float, orientation: xp.ndarray,
-                 view_size: tuple[int, int]) -> xp.ndarray:
+                 view_size: tuple[int, int], sample_mode: str = 'bilinear') -> xp.ndarray:
     """
     Creates a view image from an equirectangular panorama. The panorama is assumed to be an array of shape
     (height, width[, channels]). The FOV and orientation angles are assumed to be in DEG. The FOV can either be a
@@ -35,6 +35,8 @@ def pano_to_view(pano: xp.ndarray, fov: tuple[float, float]|float, orientation: 
                                          vertical and horizontal direction, or as a (fov_h, fov_w) tuple.
         orientation (xp.ndarray): The orientation angles [°] (pitch, roll, yaw) of new view.
         view_size (tuple[int, int]): The size of the output image of shape (height, width).
+        sample_mode (str): The sampling mode used when sampling the panorama. Supported values are 'bilinear' for
+                           bilinear interpolation and 'nearest' for nearest-neighbor sampling. Defaults to 'bilinear'.
 
     Returns:
         view (xp.ndarray): The created view of shape (height, width[, channels]).
@@ -48,6 +50,7 @@ def pano_to_view(pano: xp.ndarray, fov: tuple[float, float]|float, orientation: 
     assert len(view_size) == 2, 'The view size should have exactly 2 values (height, width).'
     assert view_size[0] > 1, 'The height of the view should be greater than 1.'
     assert view_size[1] > 1, 'The width of the view should be greater than 1.'
+    assert sample_mode in ('bilinear', 'nearest'), "The sample mode should be one of ('bilinear', 'nearest')."
 
     # Save the original data type of the panorama
     original_dtype = pano.dtype
@@ -87,8 +90,8 @@ def pano_to_view(pano: xp.ndarray, fov: tuple[float, float]|float, orientation: 
     u = ((phi / xp.pi) + 0.5) * (pano.shape[0] - 1)
     v = ((theta / (2 * xp.pi)) + 0.5) * (pano.shape[1] - 1)
 
-    # Apply bilinear sampling
-    view = sample(pano, u, v, mode='bilinear')
+    # Sample the panorama at the projected image coordinates
+    view = sample(pano, u, v, mode=sample_mode)
 
     # Move the result back to the CPU and restore the original data type
     view = to_cpu(view)
@@ -98,7 +101,7 @@ def pano_to_view(pano: xp.ndarray, fov: tuple[float, float]|float, orientation: 
 
 
 def view_to_pano(view: xp.ndarray, fov: tuple[float, float]|float, orientation: xp.ndarray,
-                 pano_size: tuple[int, int]) -> xp.ndarray:
+                 pano_size: tuple[int, int], sample_mode: str = 'bilinear') -> xp.ndarray:
     """
     Projects a perspective view onto an equirectangular panorama. The panorama will be black except for the areas onto
     which the view is projected. The view is assumed to be an array of shape (height, width[, channels]). The FOV and
@@ -118,6 +121,8 @@ def view_to_pano(view: xp.ndarray, fov: tuple[float, float]|float, orientation: 
                                          vertical and horizontal direction, or as a (fov_h, fov_w) tuple.
         orientation (xp.ndarray): The orientation angles [°] (pitch, roll, yaw) of the reference view. 
         pano_size (tuple[int, int]): The size of the output image of shape (height, width).
+        sample_mode (str): The sampling mode used when sampling the view. Supported values are 'bilinear' for bilinear
+                           interpolation and 'nearest' for nearest-neighbor sampling. Defaults to 'bilinear'.
 
     Returns:
         pano (xp.ndarray): The created panorama of shape (height, width[, channels]).
@@ -131,6 +136,7 @@ def view_to_pano(view: xp.ndarray, fov: tuple[float, float]|float, orientation: 
     assert len(pano_size) == 2, 'The panorama size should have exactly 2 values (height, width).'
     assert pano_size[0] > 1, 'The height of the panorama should be greater than 1.'
     assert pano_size[1] > 1, 'The width of the panorama should be greater than 1.'
+    assert sample_mode in ('bilinear', 'nearest'), "The sample mode should be one of ('bilinear', 'nearest')."
 
     # Save the original data type of the view
     original_dtype = view.dtype
@@ -170,9 +176,9 @@ def view_to_pano(view: xp.ndarray, fov: tuple[float, float]|float, orientation: 
     u_view = ((z[valid] / y[valid]) / xp.tan(fov_h_rad / 2) + 1) * 0.5 * (view.shape[0] - 1)
     v_view = ((x[valid] / y[valid]) / xp.tan(fov_w_rad / 2) + 1) * 0.5 * (view.shape[1] - 1)
 
-    # Create an empty panorama, project the view onto it, and apply bilinear sampling
+    # Create an empty panorama, project the view onto it, and sample it
     pano = xp.zeros((h, w, *view.shape[2:]), dtype=view.dtype)
-    pano[valid] = sample(view, u_view, v_view, mode='bilinear')
+    pano[valid] = sample(view, u_view, v_view, mode=sample_mode)
 
     # Move the result back to the CPU and restore the original data type
     pano = to_cpu(pano)
@@ -182,7 +188,8 @@ def view_to_pano(view: xp.ndarray, fov: tuple[float, float]|float, orientation: 
 
 
 def view_to_view(old_view: xp.ndarray, old_fov: tuple[float, float]|float, old_orientation: xp.ndarray,
-                 new_fov: tuple[float, float]|float, new_orientation: xp.ndarray, view_size: tuple[int, int]) -> xp.ndarray:
+                 new_fov: tuple[float, float]|float, new_orientation: xp.ndarray, view_size: tuple[int, int],
+                 sample_mode: str = 'bilinear') -> xp.ndarray:
     """
     Projects one perspective view into another. The new view will be black except for the areas onto which the view is
     projected. The view is assumed to be an array of shape (height, width[, channels]). The FOV and orientation angles
@@ -205,6 +212,8 @@ def view_to_view(old_view: xp.ndarray, old_fov: tuple[float, float]|float, old_o
                                              vertical and horizontal direction, or as a (fov_h, fov_w) tuple.
         new_orientation (xp.ndarray): The orientation angles [°] (pitch, roll, yaw) of the new view.
         view_size (tuple): The size of the output image of shape (height, width).
+        sample_mode (str): The sampling mode used when sampling the old view. Supported values are 'bilinear' for
+                           bilinear interpolation and 'nearest' for nearest-neighbor sampling. Defaults to 'bilinear'.
 
     Returns:
         new_view (xp.ndarray): The created view of shape (height, width[, channels]).
@@ -220,6 +229,7 @@ def view_to_view(old_view: xp.ndarray, old_fov: tuple[float, float]|float, old_o
     assert len(view_size) == 2, 'The view size should have exactly 2 values (height, width).'
     assert view_size[0] > 1, 'The height of the view should be greater than 1.'
     assert view_size[1] > 1, 'The width of the view should be greater than 1.'
+    assert sample_mode in ('bilinear', 'nearest'), "The sample mode should be one of ('bilinear', 'nearest')."
 
     # Save the original data type of the view
     original_dtype = old_view.dtype
@@ -268,9 +278,9 @@ def view_to_view(old_view: xp.ndarray, old_fov: tuple[float, float]|float, old_o
     u_old = ((z_old / y_old) / xp.tan(old_fov_h_rad / 2) + 1) * 0.5 * (old_view.shape[0] - 1)
     v_old = ((x_old / y_old) / xp.tan(old_fov_w_rad / 2) + 1) * 0.5 * (old_view.shape[1] - 1)
 
-    # Create an empty view, project the old view onto it, and apply bilinear sampling
+    # Create an empty view, project the old view onto it, and sample it
     new_view = xp.zeros((h, w, *old_view.shape[2:]), dtype=old_view.dtype)
-    new_view[valid] = sample(old_view, u_old[valid], v_old[valid], mode='bilinear')
+    new_view[valid] = sample(old_view, u_old[valid], v_old[valid], mode=sample_mode)
 
     # Move the result back to the CPU and restore the original data type
     new_view = to_cpu(new_view)
@@ -279,7 +289,7 @@ def view_to_view(old_view: xp.ndarray, old_fov: tuple[float, float]|float, old_o
     return new_view
 
 
-def cubemaps_to_pano(cubemaps: list[xp.ndarray], pano_size: tuple[int, int]) -> xp.ndarray:
+def cubemaps_to_pano(cubemaps: list[xp.ndarray], pano_size: tuple[int, int], sample_mode: str|None = None) -> xp.ndarray:
     """
     Projects either 6 non-overlapping cubemaps or 18 overlapping cubemaps onto an equirectangular panorama. The
     cubemaps are assumed to be arrays of shape (height, width[, channels]) representing square images with a 90° horizontal
@@ -298,6 +308,10 @@ def cubemaps_to_pano(cubemaps: list[xp.ndarray], pano_size: tuple[int, int]) -> 
     Args:
         cubemaps (list[xp.ndarray]): The list of either 6 or 18 cubemaps of shape (height, width[, channels]).
         pano_size (tuple[int, int]): The size of the output image of shape (height, width).
+        sample_mode (str|None): The sampling mode used when sampling the cubemaps. Supported values are 'bilinear' for
+                                bilinear interpolation, 'nearest' for nearest-neighbor sampling, and None to use each
+                                stitching mode's own default sampling mode ('nearest' for 6 cubemaps, 'bilinear' for
+                                18 cubemaps, see above). Defaults to None.
 
     Returns:
         pano (xp.ndarray): The created panorama of shape (height, width[, channels]).
@@ -311,6 +325,7 @@ def cubemaps_to_pano(cubemaps: list[xp.ndarray], pano_size: tuple[int, int]) -> 
     assert len(pano_size) == 2, 'The panorama size should have exactly 2 values (height, width).'
     assert pano_size[0] > 1, 'The height of the panorama should be greater than 1.'
     assert pano_size[1] > 1, 'The width of the panorama should be greater than 1.'
+    assert sample_mode in ('bilinear', 'nearest', None), "The sample mode should be one of ('bilinear', 'nearest') or None."
 
     # Save the original data type of the view
     original_dtype = cubemaps[0].dtype
@@ -377,7 +392,7 @@ def cubemaps_to_pano(cubemaps: list[xp.ndarray], pano_size: tuple[int, int]) -> 
             mask = masks[i]
             if not xp.any(mask):
                 continue
-            sampled = sample(cube, u_all[i], v_all[i], mode='nearest').astype(xp.float32)
+            sampled = sample(cube, u_all[i], v_all[i], mode=sample_mode or 'nearest').astype(xp.float32)
             pano[mask] += sampled
 
     # 18-view stitching: bilinear sampling with alpha blending
@@ -404,7 +419,7 @@ def cubemaps_to_pano(cubemaps: list[xp.ndarray], pano_size: tuple[int, int]) -> 
             mask = masks[i]
             if not xp.any(mask):
                 continue
-            sampled = sample(cube, u_all[i], v_all[i], mode='bilinear').astype(xp.float32)
+            sampled = sample(cube, u_all[i], v_all[i], mode=sample_mode or 'bilinear').astype(xp.float32)
             weight = weights[i][mask]
             pano[mask] += sampled * weight[..., None]
             weight_sum[mask] += weight
